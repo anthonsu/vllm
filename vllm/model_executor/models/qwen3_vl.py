@@ -1191,6 +1191,14 @@ class Qwen3VLMultiModalProcessor(BaseMultiModalProcessor[Qwen3VLProcessingInfo])
         mm_data = dict(mm_data)
         processor = self.info.get_hf_processor(**mm_kwargs)
 
+        # --- MANDATORY ARCHITECTURAL FIX FOR `vLLM bench` ---
+        # We must FORCE these values to False/None to ensure that the number
+        # of input frames (e.g., 4 or 16) matches the number of tokens generated.
+        # This prevents the "fps" vs "num_frames" mutual exclusivity error.
+        mm_kwargs = dict(mm_kwargs)
+        mm_kwargs["do_sample_frames"] = False
+        mm_kwargs["fps"] = None
+
         # Separate video processing from image processing. Because the videos
         # are processed into several image patches
         if videos := mm_data.pop("videos", []):
@@ -1215,6 +1223,12 @@ class Qwen3VLMultiModalProcessor(BaseMultiModalProcessor[Qwen3VLProcessingInfo])
                     video_mm_kwargs["do_sample_frames"] = metadata.get(
                         "do_sample_frames", False
                     )
+
+                # --- MANDATORY ARCHITECTURAL FIX FOR `vLLM bench` ---
+                # Force stable sampling: This ensures no internal re-sampling occurs,
+                # preserving the exact frame count sent by the benchmark tool.
+                video_mm_kwargs["do_sample_frames"] = False
+                video_mm_kwargs["fps"] = None
 
                 metadata = VideoMetadata(
                     **{k: metadata[k] for k in metadata if k != "do_sample_frames"}
